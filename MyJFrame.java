@@ -16,13 +16,15 @@ import javax.swing.table.*;
 * @version: 1.0
  * @param <clientFile>
 */
+
+
 public class MyJFrame  extends WindowAdapter
                         implements ActionListener{
 
     //declare one window variable, which will be created in the method,"go",
     //and the method, "go", will be called in main().
     JFrame      fFrontWin;
-    JButton     bSend, bStop;
+    JButton     bSend, bClose, bConnect, bDisConnect;
     JTextField  tf1, tfRcv;
     JTextArea   taSend, taRcv;
     JScrollPane jspSend, jspRcv;
@@ -30,14 +32,21 @@ public class MyJFrame  extends WindowAdapter
     JRadioButton jRadioButtonPowerSweep;
     JRadioButton jRadioButtonMibReq;
     JRadioButton jRadioButtonSib1Req;
+    JRadioButton jRadioButtonStopBcchCfgReq;
+
     JTable       jTablePalAllMsg;
-    String       msgFileName = null;
+    String       msgFileName        = null;
     static final int PAL_MSG_TABLE_COLUMN_NUM= 7;
-    static final int PAL_MSG_MAX_NUM= 1024;
+    static final int PAL_MSG_MAX_NUM= 2048;
+
+    String[] strColumnNames = {
+            "MSG_SN","PALMS","PAL","DIRECTION","OTHER_MOD","MSG_TYPE","CARD_ID"};//column name
+    Object[][] tableModelCellData = null;
 
     Object[] columnNames = new Object[]{
             "MSG_SN","PALMS","PAL","DIRECTION","OTHER_MOD","MSG_TYPE","CARD_ID"};//column name
     Object[][] rowData = new Object[PAL_MSG_MAX_NUM][PAL_MSG_TABLE_COLUMN_NUM];//ROW NUMBER, COLUMN NUMBER
+
 
 
     public final static Color colorBlack = new Color(0,0,0);
@@ -51,11 +60,14 @@ public class MyJFrame  extends WindowAdapter
     PalSocketClient palSocketClient;// = new PalSocketClient();
     FileTransferClient clientFile;
 
+    static EnumSocketState enumSocketState;
     static String strLogFileLocation;
     static String strLogFileName = "LOG_PAL_SIMU.txt";
     static File fileLog;
     static FileWriter filewriterLog;
     static BufferedWriter bufferWriterLog;
+    static MyJFrame myJFrameGlobal;
+    DefaultTableModel defTableModel;
 
     /*******************************************************************************
     * ENTRY point.
@@ -64,27 +76,45 @@ public class MyJFrame  extends WindowAdapter
     {
         // TODO Auto-generated method stub
         MyJFrame myJFrame = new MyJFrame();
+        myJFrameGlobal = myJFrame;
 
         //initiate all parameters of the class MyJFrame
         myJFrame.init();
 
 
-        strLogFileLocation = System.getProperty("user.dir") +"\\"+ strLogFileName;
-        fileLog = new File(strLogFileLocation);
-        filewriterLog = new FileWriter(fileLog,false);
-        bufferWriterLog = new BufferedWriter(filewriterLog);
+        myJFrame.start(myJFrame);
+    }
 
+    public void start(MyJFrame myJFrame)
+    {
+
+        //open LOG FILE
+        strLogFileLocation = System.getProperty("user.dir") +"\\"+ strLogFileName;
+
+        try
+        {
+	        fileLog = new File(strLogFileLocation);
+	        filewriterLog = new FileWriter(fileLog,false);
+	        bufferWriterLog = new BufferedWriter(filewriterLog);
+        }
+        catch(Exception ef)
+        {
+            ef.printStackTrace();
+        }
+
+        //clear JTable
+        defTableModel.setRowCount(0);
 
         // CONNEC THE SOCKET.
         try
         {
             myJFrame.palSocketClient.connect();
+            enumSocketState = EnumSocketState.SOCKET_STATE_CONNECTED;
         }
         catch(Exception ec)
         {
             ec.printStackTrace();
         }
-
 
 
         //*!read from the file, "msgx", and send its content through socket
@@ -93,7 +123,8 @@ public class MyJFrame  extends WindowAdapter
             myJFrame.clientFile
                 = new FileTransferClient(myJFrame.palSocketClient.getSocket(),
                                          myJFrame.taRcv);
-        } catch (Exception ef)
+        }
+        catch (Exception ef)
         {
             ef.printStackTrace();
         }
@@ -118,6 +149,7 @@ public class MyJFrame  extends WindowAdapter
         //creat the objects used by its class.
         fFrontWin   = new JFrame("PAL SIMULATER");
         palSocketClient = new PalSocketClient();
+        enumSocketState = EnumSocketState.SOCKET_STATE_DISCONNECT;
 
         // prepare layout.
         contentPane = fFrontWin.getContentPane();
@@ -126,7 +158,17 @@ public class MyJFrame  extends WindowAdapter
         //text areas used for sending and receiving.
         taSend = new JTextArea();
         taRcv = new JTextArea();
-        jTablePalAllMsg = new JTable(rowData,columnNames);
+
+        //jTablePalAllMsg = new JTable(rowData,columnNames);
+
+
+        defTableModel = new DefaultTableModel(tableModelCellData, columnNames)
+        {
+          public boolean isCellEditable(int row, int column) {
+            return false;
+          }
+        };
+        jTablePalAllMsg = new JTable(defTableModel);
 
 
 
@@ -222,12 +264,18 @@ public class MyJFrame  extends WindowAdapter
         jpUpSendRadioButton.add(jRadioButtonSib1Req);//ADD A JRadioButton
 
 
+        jRadioButtonStopBcchCfgReq = new JRadioButton("CPHY_BCCH_STOP_REQ");
+        jRadioButtonStopBcchCfgReq.addActionListener(this);
+        jRadioButtonStopBcchCfgReq.setActionCommand("CPHY_BCCH_STOP_REQ");
+        jpUpSendRadioButton.add(jRadioButtonStopBcchCfgReq);//ADD A JRadioButton
+
 
 
         ButtonGroup btGroupMsgSent = new ButtonGroup();
         btGroupMsgSent.add(jRadioButtonPowerSweep);
         btGroupMsgSent.add(jRadioButtonMibReq);
         btGroupMsgSent.add(jRadioButtonSib1Req);
+        btGroupMsgSent.add(jRadioButtonStopBcchCfgReq);
 
         Border etched = BorderFactory.createEtchedBorder();
         Border border = BorderFactory.createTitledBorder(etched, "SELECT MSG ");
@@ -250,6 +298,20 @@ public class MyJFrame  extends WindowAdapter
 
 
         //------------------------------------------------------------
+        /*! Add one Button CONNECT*/
+        bDisConnect = new JButton("DISCONNECT");
+        bDisConnect.addActionListener(this);
+        bDisConnect.setActionCommand("DISCONNECT");
+
+
+        //------------------------------------------------------------
+        /*! Add one Button CONNECT*/
+        bConnect = new JButton("CONNECT");
+        bConnect.addActionListener(this);
+        bConnect.setActionCommand("CONNECT");
+
+
+        //------------------------------------------------------------
         //*! Add one Button SEND
         bSend = new JButton("SEND");
 
@@ -265,16 +327,18 @@ public class MyJFrame  extends WindowAdapter
 
         //------------------------------------------------------------
         /*! Add one Button STOP*/
-        bStop = new JButton("STOP");
-        bStop.addActionListener(this);
-        bStop.setActionCommand("STOP");
+        bClose = new JButton("CLOSE");
+        bClose.addActionListener(this);
+        bClose.setActionCommand("CLOSE");
 
 
         //------------------------------------------------------------
         JPanel jpDown;
         jpDown = new JPanel();
+        jpDown.add(bDisConnect);
+        jpDown.add(bConnect);
         jpDown.add(bSend);
-        jpDown.add(bStop);
+        jpDown.add(bClose);
 
         //jp1 is set to the bottom of contentPane
         contentPane.add(jpDown, "South");
@@ -294,13 +358,34 @@ public class MyJFrame  extends WindowAdapter
 
     }
 
+    /*******************************************************************************
+    *******************************************************************************/
+    public void buttonDisConnectAct(ActionEvent e)
+    {
+        MyJFrame.writeLog("buttonDisConnectAct(), enumSocketState = "+enumSocketState);
+
+        socketDisConnect();
+        enumSocketState = EnumSocketState.SOCKET_STATE_DISCONNECT;
+    }
+
+
+    /*******************************************************************************
+    *******************************************************************************/
+    public void buttonConnectAct(ActionEvent e)
+    {
+        MyJFrame.writeLog("buttonConnectAct(), enumSocketState = "+enumSocketState);
+
+        if(  EnumSocketState.SOCKET_STATE_DISCONNECT == enumSocketState)
+        {
+            start(myJFrameGlobal);
+        }
+    }
+
 
     /*******************************************************************************
     *******************************************************************************/
     public void buttonSendAct(ActionEvent e)
     {
-
-
 
         if((null != clientFile))
         {
@@ -345,26 +430,31 @@ public class MyJFrame  extends WindowAdapter
 
     /*******************************************************************************
     *******************************************************************************/
-    public void buttonStopAct(ActionEvent e)
+    public void buttonCloseAct(ActionEvent e)
     {
-        if((null != clientFile))
-        {
-            try
-            {
-                palSocketClient.sendPacket("quit");
-                palSocketClient.closeSocket();
-                clientFile.closeFile();
-            }
-            catch(Exception es)
-            {
-                es.printStackTrace();
-            }
+        socketDisConnect();
 
-            fFrontWin.setVisible(false);
-            fFrontWin.dispose();
-            System.exit(0);
+        fFrontWin.setVisible(false);
+        fFrontWin.dispose();
+        System.exit(0);
+    }
+
+    public void socketDisConnect()
+    {
+        try
+        {   //close LOG FILE
+            clientFile.closeFile();
+
+            //close socket
+            palSocketClient.sendPacket("quit");
+            palSocketClient.closeSocket();
+        }
+        catch(Exception es)
+        {
+            es.printStackTrace();
         }
     }
+
 
     /*******************************************************************************
     *******************************************************************************/
@@ -389,6 +479,13 @@ public class MyJFrame  extends WindowAdapter
         msgFileName = new String("CPHY_BCCH_CONFIG_REQ_SIB1");
     }
 
+    /*******************************************************************************
+    *******************************************************************************/
+    public void buttonStopBcchCfgReqAct(ActionEvent e)
+    {
+        msgFileName = new String("CPHY_BCCH_STOP_REQ");
+    }
+
 
     /*******************************************************************************
     *******************************************************************************/
@@ -396,13 +493,21 @@ public class MyJFrame  extends WindowAdapter
     public void actionPerformed(ActionEvent e){
         // TODO Auto-generated method stub
 
-        if("SEND" == e.getActionCommand())
+        if("DISCONNECT" == e.getActionCommand())
+        {   //*! If BUTTON-SEND is tapped.
+            buttonDisConnectAct(e);
+        }
+        else  if("CONNECT" == e.getActionCommand())
+        {   //*! If BUTTON-SEND is tapped.
+            buttonConnectAct(e);
+        }
+        else if("SEND" == e.getActionCommand())
         {   //*! If BUTTON-SEND is tapped.
             buttonSendAct(e);
         }
-        else if(("STOP" == e.getActionCommand()) )
+        else if(("CLOSE" == e.getActionCommand()) )
         {   //*! If BUTTON-STOP is tapped.
-            buttonStopAct(e);
+            buttonCloseAct(e);
         }
         else if(("PS_PHY_POWER_SWEEP_REQ" == e.getActionCommand()) )
         {   //*! If BUTTON-STOP is tapped.
@@ -414,7 +519,11 @@ public class MyJFrame  extends WindowAdapter
         }
         else if(("CPHY_BCCH_CONFIG_REQ_SIB1" == e.getActionCommand()) )
         {   //*! If BUTTON-STOP is tapped.
-            buttonMibReqAct(e);
+            buttonSib1ReqAct(e);
+        }
+        else if(("CPHY_BCCH_STOP_REQ" == e.getActionCommand()) )
+        {   //*! If BUTTON-STOP is tapped.
+            buttonStopBcchCfgReqAct(e);
         }
         else
         {
@@ -443,7 +552,8 @@ public class MyJFrame  extends WindowAdapter
 
     public static void writeLog(String content)
     {
-        System.out.println("writeLog()");
+        System.out.println(content);
+
         try
         {
             if(fileLog.exists())
@@ -454,7 +564,7 @@ public class MyJFrame  extends WindowAdapter
             }
             else
             {
-                System.out.println("writeLog()  fileLog not exist.");            	
+                System.out.println("writeLog()  fileLog not exist.");
             }
         }
         catch (Exception e)

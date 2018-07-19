@@ -3,6 +3,7 @@ import java.awt.Rectangle;
 import java.io.*;
 import java.net.Socket;
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 
 
 /**
@@ -61,11 +62,11 @@ public class PalSocketClient {
         //
         //socket.shutdownOutput();
 
-        System.out.println("CLIENT close inputStream and outputStream");
+        MyJFrame.writeLog("CLIENT close inputStream and outputStream");
         inputStream.close();
         outputStream.close();
 
-        System.out.println("CLIENT close socket.");
+        MyJFrame.writeLog("CLIENT close socket.");
         socket.close();
    }
 
@@ -99,9 +100,10 @@ class ClientSocketReceive implements Runnable
     JTextField tf;
     JTextArea  ta;
     JTable jTablePalAllMsg;
+    DefaultTableModel defTableModel;
 
     byte [] byteRcv = new byte[SOCKET_DATA_LEN_RECEIVED];
-    InputStream is=null;
+    InputStream isReader=null;
     InputStreamReader isr=null;
     BufferedReader br=null;
     OutputStream os=null;
@@ -109,6 +111,8 @@ class ClientSocketReceive implements Runnable
 
     HashTableMsg    hashTableMsg;
 
+    public static final int PACKET_HEAD_LENGTH = 4;//MSG LENGTH PART.
+    public volatile byte[] bytes = new byte[0];
 
     /**
     *****************************************************************************
@@ -124,6 +128,7 @@ class ClientSocketReceive implements Runnable
         this.socket             = myJFrame.palSocketClient.getSocket();
         this.ta                 = myJFrame.taRcv;
         this.jTablePalAllMsg    = myJFrame.jTablePalAllMsg;
+        this.defTableModel      = myJFrame.defTableModel;
 
         hashTableMsg    = new HashTableMsg();
     }
@@ -140,60 +145,38 @@ class ClientSocketReceive implements Runnable
         try
         {
             int oneTimeByteNum = 0;
+            int intRet;
             //int allByteNum = 0;
 
             // SOCKET->getInputStream->InputStreamReader->BufferedReader->readLine.
             // get the source of the socket inputStream.
-            is = socket.getInputStream();
-            //br = new BufferedReader(is);
+            isReader = socket.getInputStream();
 
-            ///*
-            //receive one MSG sent from server.
-            /*
-            while(oneTimeByteNum >=0 )
+
+            //while(isReader.available() != 0)
+
+
+            //while(true)
+            while(EnumSocketState.SOCKET_STATE_CONNECTED == MyJFrame.enumSocketState)
             {
-                allByteNum += oneTimeByteNum;
+                /*
                 oneTimeByteNum
-                    = is.read(byteRcv, allByteNum, (SOCKET_DATA_LEN_RECEIVED - allByteNum));
+                    = isReader.read(byteRcv, 0, (SOCKET_DATA_LEN_RECEIVED));
                 System.out.println("MSG coming from server, oneTimeByteNum = "+oneTimeByteNum);
-            }
-            */
-
-            while(true)
-            {
-                oneTimeByteNum
-                    = is.read(byteRcv, 0, (SOCKET_DATA_LEN_RECEIVED));
-                System.out.println("MSG coming from server, oneTimeByteNum = "+oneTimeByteNum);
-                MyJFrame.writeLog("MSG coming from server, oneTimeByteNum = "+oneTimeByteNum);
-                //analyze the MSG HEADER, and print it in TEXT AREA.
-                analyseMsgHeader();
+                MyJFrame.writeLog("MSG coming from server, oneTimeByteNum = "+oneTimeByteNum);*/
+                // MSG BODY withoud header
+                intRet = rcvOneMsg(isReader);
+                if(0 == intRet)
+                {   //analyze the MSG HEADER, and print it in TEXT AREA.
+                    analyseMsgHeader();
+                }
             }
 
-            //*/
-
-            /** Because the MSG sent from server is not character, but byte array, the
-            //    client should read byte from socket but not character.
-
-            // read from the socket inputStream into one InputStreamReader, isr.
-            // Class InputStreamReader provides a bridge from byte stream to character stream.
-            isr = new InputStreamReader(is);
-
-            // put the data from InputStreamReader into BufferedReader
-            // Class BufferedReader provides character reading methods with buffer.
-            br = new BufferedReader(isr);
-
-            String info=null;
-
-            while((info=br.readLine())!=null){//read one line from the data coming from socket.
-                System.out.println("MSG coming from server: "+info);
-
-                // print the coming MSG into the TEXT AREA.
-                ta.append(info);
-                ta.append("\r\n");
-            }
-            */
+            MyJFrame.writeLog("MyJFrame.enumSocketState IS DISCONNECTED.  "
+                                + MyJFrame.enumSocketState);
         }
-        catch (IOException e) {
+        catch (IOException e)
+        {
             e.printStackTrace();
         }
 
@@ -259,9 +242,22 @@ class ClientSocketReceive implements Runnable
     }
 
 
+    /*
+    * The packet received may contain several messages, such as 1 MSG, 2 MSG,
+    * or even 0.5 MSG, 1.5 MSG.
+    */
+    public void analysePacket()
+    {
+
+    }
     public void analyseMsgHeader()
     {
         int ret;
+        Boolean boolRet;
+        String  strDirection;
+        String  strMsgMoudleFound;
+        String  strMsgNameFound;
+
         if(MyJFrame.PAL_MSG_MAX_NUM < this.intTatalReceivedMsgNum)
         {
             System.out.println("ERROR. intTatalReceivedMsgNum == "+this.intTatalReceivedMsgNum);
@@ -269,16 +265,46 @@ class ClientSocketReceive implements Runnable
         }
 
         ret = analyseMsgContentOrMsgId();
+        boolRet = hashTableMsg.findMsg(intMsgId);
+
         if(DATA_TYPE_MSG_SN == ret)
         {
-            Boolean boolRet;
 
-            boolRet = hashTableMsg.findMsg(intMsgId);
             if(true == boolRet)
             {
-               //"MSG_SN","PAL_STATE","PAL","DIRECTION","OTHER_MODULE","MSG_TYPE","CARD_ID"};//column name
-                this.jTablePalAllMsg.setValueAt(intMsgSn,   this.intTatalReceivedMsgNum, 0);
-                this.jTablePalAllMsg.setValueAt("PAL",      this.intTatalReceivedMsgNum, 2);
+
+                if(hashTableMsg.strMsgDirectionFound.equals("FROM_PAL"))
+                {
+                    strDirection = new String("----->>");
+                }
+                else
+                {
+                    strDirection = new String("<<-----");
+                }
+                strMsgMoudleFound = hashTableMsg.strMsgMoudleFound;
+                strMsgNameFound   = hashTableMsg.strMsgNameFound;
+            }
+            else
+            {
+                strDirection = new String("-------");
+                strMsgMoudleFound = "UNKNOWN";
+                strMsgNameFound   = "UNKNOWN";
+            }
+
+
+            Object[] ObjOneRow=
+                {intMsgSn, 0, "PAL", strDirection, strMsgMoudleFound, strMsgNameFound};
+
+            defTableModel.addRow(ObjOneRow);
+
+
+            /*
+            //"MSG_SN","PAL_STATE","PAL","DIRECTION","OTHER_MODULE","MSG_TYPE","CARD_ID"};//column name
+            this.jTablePalAllMsg.setValueAt(intMsgSn,   this.intTatalReceivedMsgNum, 0);
+            this.jTablePalAllMsg.setValueAt("PAL",      this.intTatalReceivedMsgNum, 2);
+
+            if(true == boolRet)
+            {
 
                 if(hashTableMsg.strMsgDirectionFound.equals("FROM_PAL"))
                 {
@@ -295,16 +321,9 @@ class ClientSocketReceive implements Runnable
 
                 this.jTablePalAllMsg.setValueAt(hashTableMsg.strMsgNameFound,
                                                 this.intTatalReceivedMsgNum, 5);
-
-                this.intTatalReceivedMsgNum++;
             }
             else
             {
-               //"MSG_SN","PAL_STATE","PAL","DIRECTION","OTHER_MODULE","MSG_TYPE","CARD_ID"};//column name
-                this.jTablePalAllMsg.setValueAt(intMsgSn,   this.intTatalReceivedMsgNum, 0);
-                this.jTablePalAllMsg.setValueAt("PAL",      this.intTatalReceivedMsgNum, 2);
-
-
                 this.jTablePalAllMsg.setValueAt("?-----?",
                                                 this.intTatalReceivedMsgNum, 3);
 
@@ -313,22 +332,25 @@ class ClientSocketReceive implements Runnable
 
                 this.jTablePalAllMsg.setValueAt("UNKNOWN",
                                                 this.intTatalReceivedMsgNum, 5);
-
-                this.intTatalReceivedMsgNum++;
             }
 
+            this.intTatalReceivedMsgNum++;
+            */
+
+            /*
             int rowCount = jTablePalAllMsg.getRowCount();
             jTablePalAllMsg.getSelectionModel().setSelectionInterval(rowCount-1, rowCount-1);
             Rectangle rect = jTablePalAllMsg.getCellRect(rowCount-1, 0, true);
             jTablePalAllMsg.scrollRectToVisible(rect);
+            */
 
         }
         else
         {
-            if(0x70 == byteRcv[4])
+            if(true == boolRet)
             {
-                System.out.println("RRC_PAL_POWER_SWEEP_REQ ");
-                ta.append("PS \t<<--- \tPHY: \tRRC_PAL_POWER_SWEEP_REQ\r\n");
+                System.out.println(hashTableMsg.strMsgNameFound);
+                ta.append("PS \t<<--- \tPHY: \t"+hashTableMsg.strMsgNameFound+"\r\n");
             }
             else
             {
@@ -338,4 +360,149 @@ class ClientSocketReceive implements Runnable
 
         }
     }
+
+
+
+    //merge two byte into one, and return the merged byte.
+    public byte[] mergebyte(byte[] byteA, byte[] byteB, int byteBBegin, int byteBEnd)
+    {
+        byte[] add = new byte[byteA.length + byteBEnd - byteBBegin];
+        int i = 0;
+
+        for (i = 0; i < byteA.length; i++)
+        {
+            add[i] = byteA[i];
+        }
+
+        for (int k = byteBBegin; k < byteBEnd; k++, i++)
+        {
+            add[i] = byteB[k];
+        }
+
+        return add;
+    }
+
+    public int rcvOneMsg(InputStream is)
+    {
+        int intRet = 1;
+        int count =0;
+        bytes = new byte[0];
+        byte[] bodyTotal = new byte[0];;
+
+        InputStream reader = is;
+
+        //try
+        //{
+            //while(reader.available() != 0)
+            //while (true)
+            while(EnumSocketState.SOCKET_STATE_CONNECTED == MyJFrame.enumSocketState)
+            {
+                try
+                {
+
+                    //the initial bytes.length is 0
+                    //After this if, the header length is read.
+                    if (bytes.length < PACKET_HEAD_LENGTH)
+                    {
+                        // the bytes number of the unread part of the header
+                        byte[] headLeftPart = new byte[PACKET_HEAD_LENGTH - bytes.length];
+
+                        MyJFrame.writeLog("rcvOneMsg()  before: int couter = reader.read(headLeftPart);");
+                        while(reader.available() == 0)
+                        {
+                        	//STATY HERE. UNTIL COMING DATA.
+                        }
+                        //counter is the length of the data read actually .
+                        int couter = reader.read(headLeftPart);
+                        MyJFrame.writeLog("rcvOneMsg() header couter = "+couter);
+
+                        if (couter < 0)
+                        {
+                            continue;
+                        }
+
+                        bytes = mergebyte(bytes, headLeftPart, 0, couter);
+                        if (couter < PACKET_HEAD_LENGTH)
+                        {
+                            continue;
+                        }
+                    }
+
+                    //
+                    //byte[] temp = new byte[0];
+                    //temp = mergebyte(temp, bytes, 0, PACKET_HEAD_LENGTH);
+                    //String templength = new String(temp);
+                    //int bodylength = Integer.parseInt(templength);// PACKET TOTAL LENGTH
+
+                    int bodylength  = byte2Int(bytes);
+                    MyJFrame.writeLog("rcvOneMsg() msg bodylength = "+bodylength);
+
+
+                    if (bytes.length - PACKET_HEAD_LENGTH < bodylength)
+                    {// less than a packet length.
+
+                        // the bytes number of the unread part of the packet
+                        byte[] bodyPart = new byte[bodylength + PACKET_HEAD_LENGTH - bytes.length];
+
+                        MyJFrame.writeLog("rcvOneMsg()  before: int couterReadThisTime = reader.read(bodyPart);");
+                        while(reader.available() == 0)
+                        {
+                        	//STATY HERE. UNTIL COMING DATA.
+                        }
+                        //read body length
+                        int couterReadThisTime = reader.read(bodyPart);
+                        MyJFrame.writeLog("rcvOneMsg() msg couterReadThisTime = "+couterReadThisTime);
+                        if (couterReadThisTime < 0)
+                        {
+                            continue;
+                        }
+
+                        //merge header and body together.
+                        bytes = mergebyte(bytes, bodyPart, 0, couterReadThisTime);
+                        if (couterReadThisTime < bodyPart.length)
+                        {
+                            continue;
+                        }
+                    }
+
+                    bodyTotal = new byte[0];
+                    bodyTotal = mergebyte(bodyTotal, bytes, PACKET_HEAD_LENGTH, bytes.length);
+                    count++;
+                    //byteRcv = bytes;
+
+                    //System.out.println(" receive msg: count = " + count+" content: "new String(bodyTotal));
+                    System.out.println(" receive msg: bytes.length = " + bytes.length);
+                    MyJFrame.writeLog("rcvOneMsg() msg bytes.length = "+bytes.length);
+                    byteRcv = bodyTotal;
+                    intRet = 0;
+                    break;
+                }
+
+                catch (Exception e)
+                {
+                    MyJFrame.writeLog("rcvOneMsg()  Exception e. ;");
+
+                    e.printStackTrace();
+                    MyJFrame.enumSocketState = EnumSocketState.SOCKET_STATE_DISCONNECT;
+                    intRet = 1;
+                }
+            }
+        /*
+        }
+        catch (Exception e1)
+        {
+            e1.printStackTrace();
+        }
+        */
+        return intRet;
+    }
+
+
 }
+
+/*
+ * packet=packetHead+content
+ * read length of the MSG first, then the content of the MSG,
+ * If the length of the received data is less than length of the MSG, read.
+ */
+

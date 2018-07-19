@@ -1,0 +1,6 @@
+
+public enum EnumSocketState {
+    SOCKET_STATE_DISCONNECT,
+    SOCKET_STATE_CONNECTED,
+    SOCKET_STATE_INVALID;
+}

@@ -1,47 +1,6 @@
 import java.util.*;
 
 
-enum EnumMsgList {
-    CPHY_RSSI_MEAS_CNF,
-    CPHY_SYNC_CNF,
-    CPHY_MIB_IND;
-}
-
-enum EnumMsgModuleList {
-    CPHY_RSSI_MEAS_CNF("RRC"),
-    CPHY_SYNC_CNF("MAC"),
-    CPHY_MIB_IND("PHY");
-
-    private String strValue;
-
-    private EnumMsgModuleList(String value) {
-        this.strValue = value;
-    }
-
-    public String getValue() {
-        return strValue;
-    }
-}
-
-//0: from PAL;  1: to PAL
-enum EnumMsgDirectionList {
-    CPHY_RSSI_MEAS_CNF("FROM_PAL"),
-    CPHY_SYNC_CNF("TO_PAL"),
-    CPHY_MIB_IND("FROM_PAL");
-
-
-    private String valueDirection;
-
-    //
-    private EnumMsgDirectionList(String value) {
-        //0: from PAL;  1: to PAL
-        this.valueDirection = value;
-    }
-
-    public String getValue() {
-        return valueDirection;
-    }
-}
 
 public class HashTableMsg {
 

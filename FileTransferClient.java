@@ -46,7 +46,7 @@ public class FileTransferClient /*extends Socket */{
     int byteNumShouldBeSent = 0;
     String msgFileLocation;
     String msgFileName;
-    String strPreviousFileName;
+    String strPreviousMsgFileName;
 
     //File file = new File("d:\\PS_PHY_POWER_SWEEP_REQ");
     File file;
@@ -58,7 +58,8 @@ public class FileTransferClient /*extends Socket */{
     {
         this.clientSocket = clientSocket;
         this.taLog = taLog;
-        this.strPreviousFileName = new String("NO_FILE");
+        this.strPreviousMsgFileName = new String("NULL");
+
         try
         {
             //write from dos into socket.
@@ -90,7 +91,7 @@ public class FileTransferClient /*extends Socket */{
         System.out.println("SEND MSG FILE: \t" + this.msgFileLocation);
 
 
-        File file = new File(this.msgFileLocation);
+        file = new File(this.msgFileLocation);
 
         if(file.exists())
         {
@@ -144,10 +145,11 @@ public class FileTransferClient /*extends Socket */{
                 /*
                 If the first time to read file, you should read from the file into the buffer.*/
                 //if(0 == fileReadTimes)
-                if(!strPreviousFileName.equals(msgFileName))
+                if(!strPreviousMsgFileName.equals(msgFileName))
                 {
-                	strPreviousFileName = msgFileName;
+                    strPreviousMsgFileName = msgFileName;
                     prepareMsgHeader(msgFileName);
+                    System.out.println("First time read file: \t"+msgFileName);
                     changeAsicCodeFileToValueBytes();
                     fileReadTimes = 1;
                 }
@@ -159,7 +161,7 @@ public class FileTransferClient /*extends Socket */{
                 taLog.append("PS \t--->> \tPHY:\t"+msgFileName+"\r\n");
                 //taLog.append(msgFileName+"\r\n");
 
-                System.out.println("PS-->PHY: \tPAL_MSG_POWER_SEEP_REQ");
+                System.out.println("PS-->PHY: \t"+msgFileName);
                 System.out.println("======== MSG SEND OVER.========");
             }
             else
@@ -211,23 +213,33 @@ public class FileTransferClient /*extends Socket */{
         bytes[1] = 0;//CARD ID = 0
         bytes[2] = 0X55;//isInDDRFlag = 0X5555
         bytes[3] = 0X55;//isInDDRFlag = 0X5555
+        bytes[5] = 0x00;
+        bytes[6] = 0x00;
+        bytes[7] = 0x00;
+
         if(msgFileName.equals(new String("PS_PHY_POWER_SWEEP_REQ")))
         {
+            System.out.println("FILE preparing----: PS_PHY_POWER_SWEEP_REQ");
             bytes[4] = 0x70;//0x00000070 is POWER_SWEEP_REQ
-            bytes[5] = 0x00;
-            bytes[6] = 0x00;
-            bytes[7] = 0x00;
         }
-        else if(msgFileName.equals("CPHY_BCCH_CONFIG_REQ_MIB"))
+        else if(msgFileName.equals((new String("CPHY_BCCH_CONFIG_REQ_MIB"))))
         {
-            bytes[4] = 0x13;//0x00000013 is CPHY_BCCH_CONFIG_REQ
-            bytes[5] = 0x00;
-            bytes[6] = 0x00;
-            bytes[7] = 0x00;        	
+            System.out.println("FILE preparing----: CPHY_BCCH_CONFIG_REQ_MIB");
+            bytes[4] = 0x13;//0x00000013 is CPHY_BCCH_CONFIG_REQ_MIB
+        }
+        else if(msgFileName.equals((new String("CPHY_BCCH_STOP_REQ"))))
+        {
+            System.out.println("FILE preparing----: CPHY_BCCH_STOP_REQ");
+            bytes[4] = 0x14;//0x00000014 is CPHY_BCCH_STOP_REQ
+        }
+        else if(msgFileName.equals((new String("CPHY_BCCH_CONFIG_REQ_SIB1"))))
+        {
+            System.out.println("FILE preparing----: CPHY_BCCH_CONFIG_REQ_SIB1");
+            bytes[4] = 0x13;//0x00000013 is CPHY_BCCH_STOP_REQ
         }
         else
         {
-        	System.out.println("ERR FILE NAME.");
+            System.out.println("ERR FILE NAME.");
         }
 
     }
